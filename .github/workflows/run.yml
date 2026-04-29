@@ -5,6 +5,9 @@ on:
     - cron: '0 10 * * *'  # roda todo dia (UTC)
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   run:
     runs-on: ubuntu-latest
@@ -30,3 +33,12 @@ jobs:
 
       - name: Rodar sistema
         run: python main.py
+
+      - name: Commitar estado (processados)
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "actions@github.com"
+          touch processados.json
+          git add processados.json
+          git commit -m "Atualiza processados [auto]" || echo "Sem mudanças"
+          git push
