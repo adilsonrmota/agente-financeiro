@@ -1,0 +1,21 @@
+[2026-04-29 17:58:58] INICIO | Execução diária iniciada
+[2026-04-29 17:59:12] OK | 19dd0a0410f9a8bf | Claro | valor=R$ 225,32 | vencimento=05/05/2026
+[2026-04-29 17:59:12] OK | 19da5f02a5458cec | Claro | valor=R$ 49,88 | vencimento=05/05/2026
+[2026-04-29 17:59:12] OK | 19d4bb8b53a7a4f7 | Antônio Campos | valor=R$ 6.728,00 | vencimento=09/06/2021
+[2026-04-29 17:59:12] OK | 19d4bb8b53a7a4f7 | Antônio Campos | valor=R$ 200,00 | vencimento=nao-identificado
+[2026-04-29 17:59:12] OK | 19d43c76372c1423 | GRUPO KAZA JACAREÍ | valor=nao-identificado | vencimento=30/03/2026
+[2026-04-29 17:59:12] OK | 19d2529e16baefd3 | Claro | valor=R$ 225,32 | vencimento=05/04/2026
+[2026-04-29 17:59:12] OK | 19d0c0c18cd12348 | Claro | valor=R$ 49,90 | vencimento=05/04/2026
+[2026-04-29 17:59:12] OK | 19ca9858727af6a7 | Mota, Adilson (GE Vernova) | valor=nao-identificado | vencimento=23/03/2026
+[2026-04-29 17:59:12] OK | 19ca9858727af6a7 | Mota, Adilson (GE Vernova) | valor=nao-identificado | vencimento=23/03/2026
+[2026-04-29 17:59:12] OK | 19ca9858727af6a7 | Mota, Adilson (GE Vernova) | valor=nao-identificado | vencimento=23/03/2026
+[2026-04-29 17:59:12] OK | 19ca9858727af6a7 | Mota, Adilson (GE Vernova) | valor=nao-identificado | vencimento=23/03/2026
+[2026-04-29 17:59:12] FIM | Processados nesta execução: 11
+[2026-04-29 17:59:40] INICIO | Execução diária iniciada
+[2026-04-29 17:59:45] INFO | Nenhum novo e-mail com PDF para processar
+[2026-04-29 18:01:45] INICIO | Execução diária iniciada
+[2026-04-29 18:01:50] INFO | Nenhum novo e-mail com PDF para processar
+[2026-04-29 18:02:40] INICIO | Execução diária iniciada
+[2026-04-29 18:02:45] INFO | Nenhum novo e-mail com PDF para processar
+[2026-04-29 18:10:45] INFO | Execução diária iniciada
+[2026-04-29 18:10:51] INFO | Nenhum novo e-mail com PDF para processar
