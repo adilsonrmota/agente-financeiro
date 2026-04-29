@@ -5,3 +5,5 @@ google-auth-httplib2
 python-dotenv
 pypdf
 openpyxl
+streamlit
+pandas
