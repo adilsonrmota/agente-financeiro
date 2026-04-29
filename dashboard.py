@@ -34,11 +34,11 @@ if missing_cols:
 
 if df.empty:
     st.info("Relatorio encontrado, mas sem registros neste mes.")
-    st.dataframe(df, use_container_width=True)
+    st.dataframe(df, width="stretch")
     st.stop()
 
 st.subheader("Contas do mes")
-st.dataframe(df, use_container_width=True)
+st.dataframe(df, width="stretch")
 
 values = (
     df["valor"]
