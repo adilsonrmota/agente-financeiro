@@ -3,6 +3,8 @@ credentials.json
 token.json
 token_calendar.json
 __pycache__/
+*.pyc
 downloads/
 logs/
-reports/
+log.txt
+state/

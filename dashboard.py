@@ -1,7 +1,15 @@
 import glob
+import hashlib
+import hmac
+import json
 import os
 import re
+import secrets
+import smtplib
+import ssl
 from datetime import date
+from datetime import datetime
+from email.message import EmailMessage
 
 import pandas as pd
 import streamlit as st
@@ -24,6 +32,113 @@ MONTH_NAMES = {
     11: "Nov",
     12: "Dez",
 }
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+STATE_DIR = os.path.join(BASE_DIR, "state")
+AUTH_FILE = os.path.join(STATE_DIR, "auth.json")
+
+DEFAULT_USERNAME = "Atom_mota"
+DEFAULT_PASSWORD = "@Xxxx1234"
+
+
+def _get_secret(name: str, default: str = "") -> str:
+    try:
+        if name in st.secrets:
+            return str(st.secrets[name])
+    except Exception:
+        pass
+
+    return os.getenv(name, default)
+
+
+def _password_hash(password: str, salt_hex: str) -> str:
+    salt = bytes.fromhex(salt_hex)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 200_000)
+    return digest.hex()
+
+
+def _load_auth() -> dict:
+    if not os.path.exists(AUTH_FILE):
+        initial_username = _get_secret("DASHBOARD_USERNAME", DEFAULT_USERNAME)
+        initial_password = _get_secret("DASHBOARD_PASSWORD", DEFAULT_PASSWORD)
+        salt_hex = secrets.token_hex(16)
+        auth = {
+            "username": initial_username,
+            "password_hash": _password_hash(initial_password, salt_hex),
+            "salt": salt_hex,
+            "password_temporary": True,
+            "updated_at": datetime.now().isoformat(timespec="seconds"),
+        }
+        _save_auth(auth)
+        return auth
+
+    with open(AUTH_FILE, "r", encoding="utf-8") as file:
+        return json.load(file)
+
+
+def _save_auth(auth: dict) -> None:
+    os.makedirs(STATE_DIR, exist_ok=True)
+    with open(AUTH_FILE, "w", encoding="utf-8") as file:
+        json.dump(auth, file, ensure_ascii=False, indent=2)
+
+
+def _verify_credentials(username: str, password: str) -> bool:
+    auth = _load_auth()
+    if username != auth.get("username", ""):
+        return False
+
+    expected_hash = auth.get("password_hash", "")
+    provided_hash = _password_hash(password, auth.get("salt", ""))
+    return hmac.compare_digest(expected_hash, provided_hash)
+
+
+def _change_password(current_password: str, new_password: str) -> tuple[bool, str]:
+    auth = _load_auth()
+    if not _verify_credentials(auth.get("username", ""), current_password):
+        return False, "Senha atual incorreta."
+
+    if len(new_password) < 8:
+        return False, "A nova senha precisa ter ao menos 8 caracteres."
+
+    new_salt = secrets.token_hex(16)
+    auth["password_hash"] = _password_hash(new_password, new_salt)
+    auth["salt"] = new_salt
+    auth["password_temporary"] = False
+    auth["updated_at"] = datetime.now().isoformat(timespec="seconds")
+    _save_auth(auth)
+
+    return True, "Senha alterada com sucesso."
+
+
+def _send_password_change_email() -> tuple[bool, str]:
+    smtp_host = _get_secret("SMTP_HOST", "smtp.gmail.com")
+    smtp_port = int(_get_secret("SMTP_PORT", "587"))
+    smtp_user = _get_secret("SMTP_USER", "")
+    smtp_pass = _get_secret("SMTP_PASS", "")
+    recipient = _get_secret("ALERT_EMAIL_TO", smtp_user)
+
+    if not smtp_user or not smtp_pass or not recipient:
+        return False, "Email de confirmacao nao enviado. Configure SMTP_USER, SMTP_PASS e ALERT_EMAIL_TO no .env."
+
+    msg = EmailMessage()
+    msg["Subject"] = "Confirmacao de troca de senha - Painel Financeiro"
+    msg["From"] = smtp_user
+    msg["To"] = recipient
+    msg.set_content(
+        "A senha do Painel Financeiro foi alterada com sucesso em "
+        f"{datetime.now().strftime('%d/%m/%Y %H:%M:%S')}."
+    )
+
+    try:
+        context = ssl.create_default_context()
+        with smtplib.SMTP(smtp_host, smtp_port, timeout=30) as server:
+            server.starttls(context=context)
+            server.login(smtp_user, smtp_pass)
+            server.send_message(msg)
+    except Exception as exc:
+        return False, f"Falha ao enviar email de confirmacao: {exc}"
+
+    return True, f"Email de confirmacao enviado para {recipient}."
 
 
 def _inject_theme() -> None:
@@ -113,6 +228,28 @@ def _inject_theme() -> None:
             margin: 6px 0 10px;
             color: var(--ink);
         }
+
+        .login-wrap {
+            max-width: 520px;
+            margin: 2rem auto 0;
+            border: 1px solid var(--line);
+            border-radius: 18px;
+            background: #ffffff;
+            padding: 18px;
+            box-shadow: 0 10px 24px rgba(18, 34, 58, 0.08);
+        }
+
+        .login-wrap h2 {
+            margin: 0 0 8px;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+        }
+
+        .login-wrap p {
+            margin: 0 0 14px;
+            color: var(--muted);
+            font-size: 14px;
+        }
         </style>
         """,
         unsafe_allow_html=True,
@@ -130,6 +267,75 @@ def _kpi_card(label: str, value: str, sub: str) -> None:
         """,
         unsafe_allow_html=True,
     )
+
+
+def _render_login() -> None:
+    st.markdown(
+        """
+        <div class="login-wrap">
+            <h2>Acesso restrito</h2>
+            <p>Entre com seu usuario e senha para acessar o painel.</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    _, form_col, _ = st.columns([3, 2, 3])
+    with form_col:
+        with st.form("login_form", clear_on_submit=False):
+            username = st.text_input("Usuario")
+            password = st.text_input("Senha", type="password")
+            submit = st.form_submit_button("Entrar", type="primary")
+
+    if submit:
+        if _verify_credentials(username, password):
+            st.session_state["authenticated"] = True
+            st.session_state["username"] = username
+            st.rerun()
+        else:
+            st.error("Usuario ou senha invalidos.")
+
+
+def _require_login() -> None:
+    _load_auth()
+
+    if not st.session_state.get("authenticated", False):
+        _render_login()
+        st.stop()
+
+    auth = _load_auth()
+    st.sidebar.success(f"Logado como: {auth.get('username', DEFAULT_USERNAME)}")
+    if st.sidebar.button("Sair"):
+        st.session_state["authenticated"] = False
+        st.session_state["username"] = ""
+        st.rerun()
+
+    with st.sidebar.expander("Trocar senha", expanded=False):
+        with st.form("change_password_form", clear_on_submit=True):
+            current_password = st.text_input("Senha atual", type="password")
+            new_password = st.text_input("Nova senha", type="password")
+            confirm_password = st.text_input("Confirmar nova senha", type="password")
+            change_submit = st.form_submit_button("Atualizar senha")
+
+        if change_submit:
+            if not new_password:
+                st.error("Informe a nova senha.")
+            elif new_password != confirm_password:
+                st.error("A confirmacao nao confere.")
+            else:
+                changed, message = _change_password(current_password, new_password)
+                if changed:
+                    st.success(message)
+                    sent, mail_message = _send_password_change_email()
+                    if sent:
+                        st.success(mail_message)
+                    else:
+                        st.warning(mail_message)
+                else:
+                    st.error(message)
+
+    if auth.get("password_temporary", False):
+        st.warning("Voce esta usando a senha provisoria. Recomendado trocar agora no menu lateral.")
 
 
 def _parse_period_from_name(path: str) -> tuple[int, int] | None:
@@ -162,12 +368,13 @@ def _load_history_dataframe() -> pd.DataFrame:
     return pd.concat(frames, ignore_index=True)
 
 
+_inject_theme()
+_require_login()
+
 df = _load_history_dataframe()
 if df.empty:
     st.warning("Nenhum relatorio CSV encontrado em reports/.")
     st.stop()
-
-_inject_theme()
 
 required_cols = ["empresa", "valor", "vencimento", "status"]
 missing_cols = [c for c in required_cols if c not in df.columns]
