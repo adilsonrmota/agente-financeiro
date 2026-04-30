@@ -269,6 +269,21 @@ def _kpi_card(label: str, value: str, sub: str) -> None:
     )
 
 
+def _calendar_button(url: str = "https://calendar.google.com/calendar/u/0/r") -> None:
+    st.markdown(
+        f"""
+        <div style="display:flex; justify-content:flex-end; margin: 6px 0 12px;">
+            <a href="{url}" target="_blank" rel="noopener noreferrer"
+               style="text-decoration:none; background:#1d4ed8; color:#ffffff; padding:10px 14px;
+                      border-radius:10px; font-weight:700; font-size:13px; box-shadow:0 6px 14px rgba(29,78,216,0.25);">
+                Abrir Google Calendar
+            </a>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def _render_login() -> None:
     st.markdown(
         """
@@ -429,6 +444,7 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+_calendar_button()
 
 total_value = filtered["valor_num"].sum()
 total_items = len(filtered)
