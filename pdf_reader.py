@@ -145,6 +145,8 @@ def download_pdf_attachments(
     max_results: int = 20,
     output_dir: str = "downloads/pdfs",
     skip_email_ids: set[str] | None = None,
+    query: str | None = None,
+    inbox_only: bool = True,
 ) -> list[dict]:
     """
     Procura anexos PDF em e-mails financeiros filtrados e baixa para disco.
@@ -153,16 +155,32 @@ def download_pdf_attachments(
     e o texto extraído via extract_text().
     """
     service = _get_service()
-    query = f"({' OR '.join(FINANCIAL_KEYWORDS)}) has:attachment filename:pdf"
+    query_text = query or f"({' OR '.join(FINANCIAL_KEYWORDS)}) has:attachment filename:pdf"
 
-    response = service.users().messages().list(
-        userId="me",
-        labelIds=["INBOX"],
-        q=query,
-        maxResults=max_results,
-    ).execute()
+    messages: list[dict] = []
+    page_token = None
 
-    messages = response.get("messages", [])
+    while len(messages) < max_results:
+        request_size = min(500, max_results - len(messages))
+        request_kwargs = {
+            "userId": "me",
+            "q": query_text,
+            "maxResults": request_size,
+        }
+        if inbox_only:
+            request_kwargs["labelIds"] = ["INBOX"]
+        if page_token:
+            request_kwargs["pageToken"] = page_token
+
+        response = service.users().messages().list(**request_kwargs).execute()
+        batch = response.get("messages", [])
+        if not batch:
+            break
+
+        messages.extend(batch)
+        page_token = response.get("nextPageToken")
+        if not page_token:
+            break
 
     os.makedirs(output_dir, exist_ok=True)
 
