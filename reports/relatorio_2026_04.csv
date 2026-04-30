@@ -1,3 +1,7 @@
 ﻿empresa,valor,vencimento,status,origem email,arquivo pdf
 Claro,"R$ 225,32",05/04/2026,extraido,Sua Fatura Digital Claro chegou,downloads\pdfs\2026\Fatura Claro.pdf
 Claro,"R$ 49,90",05/04/2026,extraido,Sua Fatura Digital Claro chegou,downloads\pdfs\2026\SuaContaClaro_Abr-2026.pdf
+XP Investimentos,,07/04/2026,dados incompletos,Nota de Negociação – Renda Fixa,downloads\pdfs\2026\nota_negociacao_14824055.pdf
+EDP,,22/04/2026,dados incompletos,EDP - FATURAS,
+CPFL,"R$ 247,82",28/04/2026,extraido corpo email,Conta por e-mail CPFL - Protocolo: 0401098467,
+GRUPO KAZA JACAREÍ,,30/04/2026,dados incompletos,Extrato de aluguel de locação,downloads\pdfs\2026\8591_0_9_6_6021495088_extrato_grupokaza.pdf

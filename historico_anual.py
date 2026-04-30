@@ -1,4 +1,5 @@
 import argparse
+import csv
 import json
 import os
 import re
@@ -6,7 +7,7 @@ from datetime import date, datetime
 
 from dotenv import load_dotenv
 
-from gmail_reader import FINANCIAL_KEYWORDS
+from gmail_reader import FINANCIAL_KEYWORDS, FINANCIAL_SENDERS, get_financial_body_emails
 from pdf_reader import download_pdf_attachments
 from reports import generate_monthly_reports
 
@@ -66,6 +67,67 @@ def _save_raw_records(records: list[dict], year: int) -> str:
     return path
 
 
+def _save_trades(records: list[dict], year: int, output_dir: str = "reports") -> str | None:
+    if not records:
+        return None
+
+    os.makedirs(output_dir, exist_ok=True)
+    path = os.path.join(output_dir, f"negociacoes_{year}.csv")
+    columns = [
+        "data",
+        "especificacao_titulo",
+        "quantidade",
+        "preco_ajuste",
+        "valor_operacao_ajuste",
+        "dc",
+        "origem email",
+        "arquivo pdf",
+    ]
+
+    with open(path, "w", newline="", encoding="utf-8-sig") as file:
+        writer = csv.DictWriter(file, fieldnames=columns)
+        writer.writeheader()
+        for record in records:
+            writer.writerow({col: record.get(col, "") for col in columns})
+
+    return path
+
+
+def _extract_xp_trades(text: str) -> list[dict]:
+    """
+    Extrai linhas de operações da nota de negociação da XP.
+    """
+    lines = [re.sub(r"\s+", " ", line).strip() for line in text.splitlines()]
+    lines = [line for line in lines if line]
+
+    pattern = re.compile(
+        r"^(?P<titulo>.+?)\s+(?P<quantidade>\d+[\d\.,]*)\s+(?P<preco>\d+[\d\.,]*)\s+"
+        r"(?P<valor>\d+[\d\.,]*)\s+(?P<dc>[DC])$"
+    )
+
+    trades: list[dict] = []
+    for line in lines:
+        match = pattern.match(line)
+        if not match:
+            continue
+
+        titulo = match.group("titulo").strip()
+        if len(titulo) < 3 or "especific" in titulo.lower() or "quantidade" in titulo.lower():
+            continue
+
+        trades.append(
+            {
+                "especificacao_titulo": titulo,
+                "quantidade": match.group("quantidade"),
+                "preco_ajuste": match.group("preco"),
+                "valor_operacao_ajuste": match.group("valor"),
+                "dc": match.group("dc"),
+            }
+        )
+
+    return trades
+
+
 def build_historical_reports(year: int, max_results: int = 2000) -> None:
     load_dotenv()
     cpf = os.getenv("CPF", "").strip()
@@ -73,8 +135,15 @@ def build_historical_reports(year: int, max_results: int = 2000) -> None:
     if not cpf:
         raise RuntimeError("CPF não encontrado no .env")
 
+    senders_filter = " OR ".join(
+        [
+            f"from:{FINANCIAL_SENDERS['edp']}",
+            f"from:{FINANCIAL_SENDERS['itau']}",
+            f"from:{FINANCIAL_SENDERS['xp']}",
+        ]
+    )
     query = (
-        f"({' OR '.join(FINANCIAL_KEYWORDS)}) has:attachment filename:pdf "
+        f"(({senders_filter}) OR ({' OR '.join(FINANCIAL_KEYWORDS)})) has:attachment filename:pdf "
         f"after:{year}/01/01 before:{year + 1}/01/01"
     )
 
@@ -90,9 +159,19 @@ def build_historical_reports(year: int, max_results: int = 2000) -> None:
 
     if not pdf_items:
         print("Nenhum e-mail com PDF encontrado para o período.")
-        return
+        pdf_items = []
+
+    body_query = (
+        f"(from:{FINANCIAL_SENDERS['cpfl']} OR from:{FINANCIAL_SENDERS['edp']}) "
+        f"after:{year}/01/01 before:{year + 1}/01/01"
+    )
+    body_items = get_financial_body_emails(
+        max_results=max_results,
+        query=body_query,
+    )
 
     records: list[dict] = []
+    trades: list[dict] = []
     seen_keys: set[tuple[str, str]] = set()
 
     pdf_errors = 0
@@ -110,6 +189,7 @@ def build_historical_reports(year: int, max_results: int = 2000) -> None:
 
         empresa = item.get("empresa", "Não identificada")
         assunto = item.get("assunto", "")
+        remetente = str(item.get("remetente", "")).lower()
 
         if extraction.get("error"):
             pdf_errors += 1
@@ -129,6 +209,18 @@ def build_historical_reports(year: int, max_results: int = 2000) -> None:
         valor = _extract_amount(text)
         vencimento = _extract_due_date(text)
 
+        if "xpi.com.br" in remetente or "nota de negocia" in assunto.lower():
+            trade_rows = _extract_xp_trades(text)
+            for row in trade_rows:
+                trades.append(
+                    {
+                        "data": item.get("data", ""),
+                        "origem email": assunto,
+                        "arquivo pdf": arquivo,
+                        **row,
+                    }
+                )
+
         status = "extraido"
         if not valor or not vencimento:
             status = "dados incompletos"
@@ -142,6 +234,35 @@ def build_historical_reports(year: int, max_results: int = 2000) -> None:
                 "status": status,
                 "origem email": assunto,
                 "arquivo pdf": arquivo,
+            }
+        )
+
+    seen_email_ids = {str(item.get("email_id", "")) for item in pdf_items}
+    for item in body_items:
+        email_id = str(item.get("id", ""))
+        if email_id in seen_email_ids and item.get("has_pdf"):
+            continue
+
+        content = f"{item.get('subject', '')} {item.get('snippet', '')} {item.get('body_text', '')}"
+        valor = _extract_amount(content)
+        vencimento = _extract_due_date(content)
+
+        if not valor and not vencimento:
+            continue
+
+        status = "extraido corpo email"
+        if not valor or not vencimento:
+            status = "dados incompletos"
+            parse_warnings += 1
+
+        records.append(
+            {
+                "empresa": item.get("company", "Não identificada"),
+                "valor": valor or "",
+                "vencimento": vencimento or "",
+                "status": status,
+                "origem email": item.get("subject", ""),
+                "arquivo pdf": "",
             }
         )
 
@@ -167,14 +288,17 @@ def build_historical_reports(year: int, max_results: int = 2000) -> None:
 
     if not generated:
         print("Nenhum relatório mensal foi gerado (sem vencimentos válidos).")
-        return
+    else:
+        print("Relatórios gerados:")
+        for info in generated:
+            print(
+                f"- {info['year']}-{info['month']:02d} | registros={info['total_records']} | "
+                f"csv={info['csv']} | excel={info['excel']}"
+            )
 
-    print("Relatórios gerados:")
-    for info in generated:
-        print(
-            f"- {info['year']}-{info['month']:02d} | registros={info['total_records']} | "
-            f"csv={info['csv']} | excel={info['excel']}"
-        )
+    trades_path = _save_trades(trades, year=year)
+    if trades_path:
+        print(f"Relatorio de negociacoes XP: {trades_path}")
 
 
 if __name__ == "__main__":

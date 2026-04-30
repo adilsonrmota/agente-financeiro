@@ -252,6 +252,7 @@ def download_pdf_attachments(
             results.append({
                 "email_id": message_id,
                 "empresa": company,
+                "remetente": sender,
                 "assunto": subject,
                 "data": raw_date,
                 "arquivo": pdf_path,
