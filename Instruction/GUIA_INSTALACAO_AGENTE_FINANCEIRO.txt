@@ -1,0 +1,188 @@
+🚀 GUIA COMPLETO - INSTALACAO DO AGENTE FINANCEIRO PARA NOVA PESSOA
+
+Objetivo:
+Configurar este projeto para outro cliente, outro email e outra conta Google, sem quebrar o ambiente atual.
+
+============================================================
+📦 1) O QUE A NOVA PESSOA PRECISA TER
+============================================================
+
+✅ Conta Google (Gmail) ativa
+✅ Acesso ao Google Calendar da mesma conta
+✅ GitHub (pode ser Free; Pro e opcional)
+✅ Conta no Streamlit Cloud (gratis funciona)
+✅ Computador para autorizacao inicial OAuth (uma vez)
+✅ Python 3.11+ instalado (recomendado 3.11 ou 3.12)
+✅ CPF do titular (para PDFs com senha por CPF)
+
+Opcional (recomendado):
+🔐 Gmail com 2FA + senha de app para envio de email de confirmacao de troca de senha
+
+============================================================
+🧱 2) ARQUITETURA DO SERVICO
+============================================================
+
+GitHub Actions (executa rotina diaria)
+➡️ Le Gmail e processa PDFs
+➡️ Gera/atualiza reports
+➡️ Atualiza processados.json
+➡️ Faz commit automatico no repositorio
+➡️ Streamlit Cloud exibe o painel online
+
+Painel principal:
+- dashboard.py
+
+Pagina de acoes:
+- pages/acoes_negociacao.py
+
+============================================================
+🛠️ 3) PASSO A PASSO PARA NOVO CLIENTE
+============================================================
+
+1. Duplicar o repositorio
+- Fazer fork ou criar novo repositorio privado para o cliente.
+- Enviar o codigo atual para esse novo repositorio.
+
+2. Configurar Google Cloud do cliente
+- Criar projeto no Google Cloud.
+- Ativar APIs:
+  - Gmail API
+  - Google Calendar API
+- Criar OAuth Client (Desktop App).
+- Baixar credentials.json do cliente.
+
+3. Autorizar Gmail e Calendar pela primeira vez
+- Rodar localmente com as credenciais do cliente.
+- Gerar:
+  - token.json
+  - token_calendar.json
+- Esses tokens serao usados nos Secrets do GitHub.
+
+4. Criar arquivo .env local do cliente
+- Conteudo minimo:
+  CPF=CPF_DO_CLIENTE
+
+Se usar email de confirmacao de troca de senha:
+- SMTP_HOST=smtp.gmail.com
+- SMTP_PORT=587
+- SMTP_USER=EMAIL_QUE_ENVIA
+- SMTP_PASS=SENHA_DE_APP
+- ALERT_EMAIL_TO=EMAIL_DO_CLIENTE
+
+5. Subir Secrets no GitHub do cliente
+Em Settings > Secrets and variables > Actions:
+- GOOGLE_CREDENTIALS (conteudo do credentials.json)
+- TOKEN_GMAIL (conteudo do token.json)
+- TOKEN_CALENDAR (conteudo do token_calendar.json)
+- CPF (cpf do cliente)
+
+6. Configurar login do dashboard no Streamlit Cloud
+No app do Streamlit > Settings > Secrets:
+- DASHBOARD_USERNAME
+- DASHBOARD_PASSWORD
+
+Opcional (email de confirmacao):
+- SMTP_HOST
+- SMTP_PORT
+- SMTP_USER
+- SMTP_PASS
+- ALERT_EMAIL_TO
+
+7. Deploy no Streamlit Cloud
+- Entrar em https://streamlit.io/cloud
+- New app
+- Repository: repo do cliente
+- Branch: main
+- Main file path: dashboard.py
+- Deploy
+
+8. Testar rotina automatica
+- Ir em GitHub > Actions > Run workflow
+- Verificar:
+  ✅ processados.json atualizado
+  ✅ reports atualizados
+  ✅ painel refletindo os dados
+
+9. Testar pagina de acoes
+- No Streamlit, abrir pagina "acoes_negociacao" no menu lateral
+- Confirmar se negociacoes XP aparecem quando houver nota compativel
+
+============================================================
+📁 4) QUAIS ARQUIVOS PERSONALIZAR PARA CADA NOVA PESSOA
+============================================================
+
+Obrigatorio revisar:
+- .env (CPF local)
+- GitHub Secrets (credenciais/tokens/cpf)
+- Streamlit Secrets (usuario/senha do painel)
+
+Arquivos de codigo que permanecem os mesmos (normalmente):
+- main.py
+- gmail_reader.py
+- pdf_reader.py
+- historico_anual.py
+- dashboard.py
+- pages/acoes_negociacao.py
+- .github/workflows/run.yml
+
+Arquivos gerados por cliente (dados):
+- processados.json
+- reports/*.csv
+- reports/*.xlsx
+- state/historico_YYYY.json (local)
+
+============================================================
+🧪 5) CHECKLIST FINAL DE VALIDACAO
+============================================================
+
+✅ Login no painel funcionando
+✅ Leitura de Claro, EDP, CPFL e Itau
+✅ Evento no Calendar criado quando dados completos
+✅ XP aparecendo na pagina de negociacoes (quando layout compativel)
+✅ Workflow diario executando
+✅ Commit automatico de processados e reports
+✅ Painel abre por link publico (streamlit.app)
+
+============================================================
+💼 6) MODELO DE OFERTA PARA VENDER O SERVICO
+============================================================
+
+Sugestao comercial (ajuste para sua regiao):
+
+Plano Setup (implantacao unica):
+💰 R$ 1.500 a R$ 3.500
+Inclui:
+- configuracao completa
+- deploy cloud
+- integracao Gmail/Calendar
+- treinamento rapido
+
+Plano Mensal (operacao e suporte):
+💰 R$ 197 a R$ 497 / mes
+Inclui:
+- monitoramento
+- pequenos ajustes
+- suporte
+
+Plano Premium (consultivo + evolucao):
+💰 R$ 790 a R$ 1.500 / mes
+Inclui:
+- melhorias continuas
+- novos conectores
+- analytics avancado
+
+Dica de precificacao:
+- Cobre Setup + Mensal.
+- Nao venda apenas "codigo"; venda "automacao + tempo economizado + previsibilidade financeira".
+
+============================================================
+📌 7) PROXIMO PASSO RECOMENDADO
+============================================================
+
+1) Criar um repo-template "agente-financeiro-template"
+2) Duplicar para cada cliente
+3) Aplicar este checklist
+4) Rodar validacao final
+5) Entregar link online pronto
+
+Fim do guia ✅
