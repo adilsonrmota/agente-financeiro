@@ -7,6 +7,7 @@ from datetime import date, datetime
 from dotenv import load_dotenv
 
 from agenda import criar_evento_vencimento
+from gmail_reader import FINANCIAL_SENDERS, get_financial_body_emails
 from pdf_reader import download_pdf_attachments
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -101,6 +102,12 @@ def _print_item(empresa: str, valor: str | None, vencimento: str | None) -> None
 def main() -> None:
     load_dotenv()
     cpf = os.getenv("CPF", "").strip()
+    max_results_raw = os.getenv("EMAIL_MAX_RESULTS", "200").strip()
+
+    try:
+        max_results = max(1, int(max_results_raw))
+    except ValueError:
+        max_results = 200
 
     if not cpf:
         message = "CPF não encontrado no arquivo .env"
@@ -116,7 +123,13 @@ def main() -> None:
     try:
         pdf_items = download_pdf_attachments(
             cpf=cpf,
-            max_results=20,
+            max_results=max_results,
+            skip_email_ids=processed_ids,
+        )
+        body_query = " OR ".join(f"from:{sender}" for sender in FINANCIAL_SENDERS.values())
+        body_items = get_financial_body_emails(
+            max_results=max_results,
+            query=body_query,
             skip_email_ids=processed_ids,
         )
     except Exception as exc:
@@ -124,9 +137,9 @@ def main() -> None:
         _append_log("ERROR", "Falha ao consultar Gmail/PDFs", erro=str(exc), traceback=traceback.format_exc().strip())
         return
 
-    if not pdf_items:
-        print("Nenhum novo e-mail com PDF para processar.")
-        _append_log("INFO", "Nenhum novo e-mail com PDF para processar")
+    if not pdf_items and not body_items:
+        print("Nenhum novo e-mail financeiro para processar.")
+        _append_log("INFO", "Nenhum novo e-mail financeiro para processar")
         return
 
     total_items = len(pdf_items)
@@ -213,6 +226,79 @@ def main() -> None:
         except Exception as exc:
             _append_log("ERROR", "Falha inesperada ao processar item", email_id=email_id, empresa=empresa, erro=str(exc), traceback=traceback.format_exc().strip())
             print(f"Erro inesperado ao processar {empresa}: {exc}")
+            print()
+
+    pdf_email_ids = {str(item.get("email_id", "")) for item in pdf_items}
+    for item in body_items:
+        email_id = str(item.get("id", "desconhecido"))
+        if email_id in pdf_email_ids and item.get("has_pdf"):
+            continue
+
+        empresa = item.get("company", "Não identificada")
+        assunto = item.get("subject", "")
+
+        try:
+            content = f"{item.get('subject', '')} {item.get('snippet', '')} {item.get('body_text', '')}"
+            valor = _extract_amount(content)
+            vencimento = _extract_due_date(content)
+            vencimento_data = _parse_due_date(vencimento)
+
+            event_link = None
+            event_error = None
+            event_exists = False
+
+            if valor and vencimento_data:
+                event_key = (empresa, valor, vencimento_data.isoformat())
+                if event_key in seen_event_keys:
+                    event_exists = True
+                else:
+                    try:
+                        event = criar_evento_vencimento(
+                            empresa=empresa,
+                            valor=valor,
+                            vencimento=vencimento_data,
+                        )
+                        event_link = event.get("htmlLink")
+                        event_exists = bool(event.get("already_exists"))
+                        seen_event_keys.add(event_key)
+                    except Exception as exc:
+                        event_error = str(exc)
+
+            _print_item(empresa, valor, vencimento)
+
+            if event_link and event_exists:
+                calendar_duplicates += 1
+                print(f"Evento existente: {event_link}")
+                print()
+            elif event_link:
+                calendar_created += 1
+                print(f"Evento: {event_link}")
+                print()
+            elif event_error:
+                calendar_errors += 1
+                print(f"Erro Calendario: {event_error}")
+                print()
+            elif valor is None or vencimento is None:
+                parse_warnings += 1
+
+            should_mark_processed = event_error is None
+
+            if event_link and event_exists:
+                _append_log("INFO", "Evento já existente no calendário (corpo e-mail)", email_id=email_id, empresa=empresa, valor=valor or "nao-identificado", vencimento=vencimento or "nao-identificado", origem=assunto, evento=event_link)
+            elif event_link:
+                _append_log("INFO", "Evento criado no calendário (corpo e-mail)", email_id=email_id, empresa=empresa, valor=valor or "nao-identificado", vencimento=vencimento or "nao-identificado", origem=assunto, evento=event_link)
+            elif event_error:
+                _append_log("ERROR", "Falha ao criar evento no calendário (corpo e-mail)", email_id=email_id, empresa=empresa, valor=valor or "nao-identificado", vencimento=vencimento or "nao-identificado", origem=assunto, erro=event_error)
+            else:
+                _append_log("WARN", "Dados incompletos para criar evento (corpo e-mail)", email_id=email_id, empresa=empresa, valor=valor or "nao-identificado", vencimento=vencimento or "nao-identificado", origem=assunto)
+
+            if should_mark_processed:
+                processed_ids.add(email_id)
+            processed_now += 1
+            total_items += 1
+        except Exception as exc:
+            _append_log("ERROR", "Falha inesperada ao processar corpo do e-mail", email_id=email_id, empresa=empresa, erro=str(exc), traceback=traceback.format_exc().strip())
+            print(f"Erro inesperado ao processar corpo de e-mail ({empresa}): {exc}")
             print()
 
     _save_processed_ids(processed_ids)
